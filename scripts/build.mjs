@@ -7,7 +7,7 @@
 // (ODbL).
 import { execFileSync } from 'node:child_process';
 import { createReadStream, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
 // Same road rules as the app (src/lib/coverage.ts).
@@ -87,7 +87,7 @@ async function main() {
     console.error('usage: node scripts/build.mjs <state.osm.pbf> <out-dir> <State Name>');
     process.exit(2);
   }
-  const work = join(outDir, '.work');
+  const work = resolve(outDir, '.work'); // absolute: osmium reads extract paths relative to its config file
   mkdirSync(work, { recursive: true });
   const built = new Date().toISOString().slice(0, 10);
   // 1. County outlines (admin_level 6 boundaries).
