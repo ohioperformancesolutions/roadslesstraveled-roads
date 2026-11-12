@@ -179,7 +179,12 @@ async function main() {
     counties.push({ id, name: p.name, rings: polys.flat() });
   }
   console.log(`${stateName}: ${counties.length} counties`);
-  if (!counties.length) throw new Error('no counties found');
+  if (!counties.length) {
+    // e.g. Washington, DC has no counties in the map data: nothing to build.
+    console.log(`${stateName}: no counties in the map data, skipping`);
+    rmSync(work, { recursive: true, force: true });
+    return;
+  }
   const locate = buildLocator(counties);
   console.log('county grid ready');
 

@@ -38,10 +38,10 @@ jobs:
   build:
     needs: plan
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 360
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 3
       matrix:
         state: ${{ fromJson(needs.plan.outputs.states) }}
     steps:
@@ -64,7 +64,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="roads-${{ matrix.state }}"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "Roads: ${{ matrix.state }}" \
-            --notes "County road files for the Roads Less Traveled app. Road data © OpenStreetMap contributors, ODbL. Rebuilt monthly."
-          gh release upload "$TAG" out/*.json --clobber
+          bash scripts/publish.sh "roads-${{ matrix.state }}"
