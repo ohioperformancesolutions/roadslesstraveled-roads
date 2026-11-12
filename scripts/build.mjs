@@ -114,44 +114,63 @@ function thinRing(ring) {
  * border passes through it (check exactly).
  */
 export function buildLocator(counties) {
-  const grid = new Map(); // "x,y" -> { sure: number|undefined, edge: number[] }
-  const key = (x, y) => `${x},${y}`;
+  // Numeric cell keys (lighter than strings for millions of cells).
+  const key = (x, y) => (x + 20000) * 40000 + (y + 10000);
   const cellOf = (v) => Math.floor(v / CELL);
+  const sure = new Map(); // cell -> county index (cell fully inside that county)
+  const edge = new Map(); // cell -> county indexes whose border passes through it
   counties.forEach((c, ci) => {
     c.thin = c.rings.map(thinRing);
     const border = new Set();
+    const crossings = new Map(); // cell row -> x positions where the border crosses the row's middle
     for (const ring of c.thin)
       for (let i = 1; i < ring.length; i++) {
         const [x0, y0] = ring[i - 1];
         const [x1, y1] = ring[i];
+        if (Math.abs(x1 - x0) > 180) continue; // jump across the 180° line (Aleutians): skip
         const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / (CELL / 3)));
         for (let k = 0; k <= steps; k++) {
           const cx = cellOf(x0 + ((x1 - x0) * k) / steps);
           const cy = cellOf(y0 + ((y1 - y0) * k) / steps);
           for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) border.add(key(cx + dx, cy + dy));
         }
-      }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const ring of c.thin) for (const [x, y] of ring) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
-    for (let cx = cellOf(minX) - 1; cx <= cellOf(maxX) + 1; cx++)
-      for (let cy = cellOf(minY) - 1; cy <= cellOf(maxY) + 1; cy++) {
-        const k = key(cx, cy);
-        let cell = grid.get(k);
-        if (border.has(k)) {
-          if (!cell) grid.set(k, (cell = { sure: undefined, edge: [] }));
-          cell.edge.push(ci);
-        } else if (insideRings(c.thin, (cx + 0.5) * CELL, (cy + 0.5) * CELL)) {
-          if (!cell) grid.set(k, (cell = { sure: undefined, edge: [] }));
-          cell.sure = ci;
+        // Where this edge crosses the middle line of each cell row (for filling the inside row by row).
+        const r0 = Math.ceil(Math.min(y0, y1) / CELL - 0.5);
+        const r1 = Math.floor(Math.max(y0, y1) / CELL - 0.5);
+        for (let r = r0; r <= r1; r++) {
+          const y = (r + 0.5) * CELL;
+          if (y0 > y === y1 > y) continue;
+          const x = x0 + ((y - y0) * (x1 - x0)) / (y1 - y0);
+          let list = crossings.get(r);
+          if (!list) crossings.set(r, (list = []));
+          list.push(x);
         }
       }
+    for (const k of border) {
+      let list = edge.get(k);
+      if (!list) edge.set(k, (list = []));
+      list.push(ci);
+    }
+    // Fill: between each pair of crossings the row is inside the county.
+    for (const [r, xs] of crossings) {
+      xs.sort((a, b) => a - b);
+      for (let i = 0; i + 1 < xs.length; i += 2) {
+        const from = Math.ceil(xs[i] / CELL - 0.5);
+        const to = Math.floor(xs[i + 1] / CELL - 0.5);
+        for (let cx = from; cx <= to; cx++) {
+          const k = key(cx, r);
+          if (!border.has(k)) sure.set(k, ci);
+        }
+      }
+    }
   });
   /** Indexes of the counties this point is in (normally one). */
   return (lon, lat) => {
-    const cell = grid.get(key(cellOf(lon), cellOf(lat)));
-    if (!cell) return [];
-    const out = cell.sure !== undefined ? [cell.sure] : [];
-    for (const ci of cell.edge) if (insideRings(counties[ci].thin, lon, lat)) out.push(ci);
+    const k = key(cellOf(lon), cellOf(lat));
+    const s = sure.get(k);
+    const out = s !== undefined ? [s] : [];
+    const list = edge.get(k);
+    if (list) for (const ci of list) if (insideRings(counties[ci].thin, lon, lat)) out.push(ci);
     return out;
   };
 }

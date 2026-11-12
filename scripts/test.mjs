@@ -29,3 +29,9 @@ assert.equal(insideRings([sq(-92, -91.6)], -91.7, 37.9), true);
 const t0 = Date.now();
 for (let i = 0; i < 1e6; i++) locate(-92 + (i % 800) / 1000, 37.6 + (i % 500) / 1000);
 console.log(`locator ok, 1M lookups in ${Date.now() - t0} ms`);
+// A huge county (like an Alaska borough, 15° x 8°) builds quickly.
+const t1 = Date.now();
+const big = buildLocator([{ id: 9, rings: [[[-160, 60], [-145, 60], [-145, 68], [-160, 68], [-160, 60]]] }]);
+assert.deepEqual(big(-150, 64), [0]);
+assert.deepEqual(big(-140, 64), []);
+console.log(`huge county grid in ${Date.now() - t1} ms`);
