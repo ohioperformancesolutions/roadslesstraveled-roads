@@ -189,14 +189,19 @@ async function main() {
   osmium('tags-filter', pbf, 'r/boundary=administrative', '-o', join(work, 'bnd.pbf'), '--overwrite');
   osmium('export', join(work, 'bnd.pbf'), '-f', 'geojsonseq', '--geometry-types=polygon', '--add-unique-id=type_id', '-o', join(work, 'bnd.geojsonseq'), '--overwrite');
   const counties = [];
+  const stateItself = [];
   for await (const f of features(join(work, 'bnd.geojsonseq'))) {
     const p = f.properties ?? {};
-    if (p.admin_level !== '6' || !p.name) continue;
+    if (!p.name || (p.admin_level !== '6' && p.admin_level !== '4')) continue;
     const id = osmId(f.id, 'r');
     if (id == null) continue;
     const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
-    counties.push({ id, name: p.name, rings: polys.flat() });
+    const c = { id, name: p.name, rings: polys.flat() };
+    if (p.admin_level === '6') counties.push(c);
+    else if (p.name.toLowerCase() === stateName.toLowerCase()) stateItself.push(c);
   }
+  // Washington, DC has no counties: it counts as its own county (as the Census treats it), like the app.
+  if (!counties.length && stateItself.length) counties.push(stateItself[0]);
   console.log(`${stateName}: ${counties.length} counties`);
   if (!counties.length) {
     // e.g. Washington, DC has no counties in the map data: nothing to build.
