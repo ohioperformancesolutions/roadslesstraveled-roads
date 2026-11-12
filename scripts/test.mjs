@@ -1,0 +1,15 @@
+import assert from 'node:assert';
+const { wantRoad, encodeWay, encodeOutline } = await import('./build.mjs');
+assert.equal(wantRoad({ highway: 'residential' }), 0);
+assert.equal(wantRoad({ highway: 'primary', surface: 'gravel' }), 3);
+assert.equal(wantRoad({ highway: 'service' }), null, 'unnamed service road');
+assert.equal(wantRoad({ highway: 'service', name: 'Williams Dr' }), 4);
+assert.equal(wantRoad({ highway: 'service', name: 'X', service: 'parking_aisle' }), null);
+assert.equal(wantRoad({ highway: 'residential', access: 'private' }), null);
+assert.equal(wantRoad({ highway: 'footway' }), null);
+const enc = [];
+encodeWay(0, [[-91.77, 37.95], [-91.76, 37.951]], enc);
+assert.deepEqual(enc, [0, 2, 37950000, -91770000, 1000, 10000]);
+const o = encodeOutline([[[-92, 37], [-91, 37], [-91, 38], [-92, 38], [-92, 37]]]);
+assert.equal(o[0], 5);
+console.log('build script tests ok');
