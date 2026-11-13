@@ -190,14 +190,16 @@ async function main() {
   osmium('export', join(work, 'bnd.pbf'), '-f', 'geojsonseq', '--geometry-types=polygon', '--add-unique-id=type_id', '-o', join(work, 'bnd.geojsonseq'), '--overwrite');
   const counties = [];
   const stateItself = [];
+  const cities = []; // incorporated cities and towns (admin_level 8)
   for await (const f of features(join(work, 'bnd.geojsonseq'))) {
     const p = f.properties ?? {};
-    if (!p.name || (p.admin_level !== '6' && p.admin_level !== '4')) continue;
+    if (!p.name || !['4', '6', '8'].includes(p.admin_level)) continue;
     const id = osmId(f.id, 'r');
     if (id == null) continue;
     const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
     const c = { id, name: p.name, rings: polys.flat() };
     if (p.admin_level === '6') counties.push(c);
+    else if (p.admin_level === '8') cities.push(c);
     else if (p.name.toLowerCase() === stateName.toLowerCase()) stateItself.push(c);
   }
   // Washington, DC has no counties: it counts as its own county (as the Census treats it), like the app.
@@ -211,6 +213,17 @@ async function main() {
   }
   const locate = buildLocator(counties);
   console.log('county grid ready');
+  // Each city goes in the file of every county it reaches (a few cities span several counties).
+  const citiesByCounty = counties.map(() => []);
+  for (const city of cities) {
+    const outline = encodeOutline(city.rings);
+    if (!outline.length) continue;
+    const hit = new Set();
+    for (const ring of city.rings) for (let i = 0; i < ring.length; i += 5) for (const ci of locate(ring[i][0], ring[i][1])) hit.add(ci);
+    const entry = { id: city.id, name: city.name, counties: [...hit].map((ci) => counties[ci].id), outline };
+    for (const ci of hit) citiesByCounty[ci].push(entry);
+  }
+  console.log(`${cities.length} cities and towns`);
 
   // 2. One pass over the state's roads: each road goes to every county it has a point in (like the app's
   //    "roads in this county" query, whole roads kept). Written out in chunks to keep memory low.
@@ -251,7 +264,7 @@ async function main() {
   counties.forEach((c, ci) => {
     const part = join(work, `${c.id}.part`);
     const body = sizes[ci] ? readFileSync(part, 'utf8') : '';
-    const head = JSON.stringify({ v: 1, built, state: stateName, county: c.name, id: c.id, outline: encodeOutline(c.rings) });
+    const head = JSON.stringify({ v: 1, built, state: stateName, county: c.name, id: c.id, outline: encodeOutline(c.rings), cities: citiesByCounty[ci] });
     writeFileSync(join(outDir, `${c.id}.json`), `${head.slice(0, -1)},"enc":[${body}]}`);
     index.push({ id: c.id, county: c.name, roads: roads[ci] });
   });
